@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f7d4f">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Zakupki</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--text:#1f2a24;--muted:#7a857e;--line:#e4e2da;--accent:#2f7d4f;--accent-text:#fff;--danger:#c0392b}
+@media (prefers-color-scheme:dark){:root{--bg:#141815;--card:#1d231f;--text:#e8ede9;--muted:#8a968e;--line:#2c352f;--accent:#4aa673;--accent-text:#0d1410;--danger:#e0705f}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:env(safe-area-inset-bottom)}
+header{position:sticky;top:0;z-index:2;background:var(--bg);padding:calc(12px + env(safe-area-inset-top)) 16px 8px;display:flex;align-items:center;gap:10px}
+h1{font-size:22px;margin:0;flex:1}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--accent)}
+.dot.off{background:var(--danger)}
+main{max-width:640px;margin:0 auto;padding:0 16px 40px}
+form{display:grid;grid-template-columns:1fr 64px 84px;gap:8px;margin:8px 0 6px}
+input,select{font:inherit;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;min-width:0;width:100%}
+input:focus,select:focus{outline:2px solid var(--accent);border-color:transparent}
+.row2{display:flex;gap:8px;grid-column:1/-1}
+button{font:inherit;border:0;border-radius:12px;padding:12px 16px;cursor:pointer;color:var(--accent-text);background:var(--accent);font-weight:600}
+button.ghost{background:transparent;color:var(--muted);font-weight:500;padding:8px}
+.add{flex:1}
+.mic{width:56px;padding:0;font-size:22px}
+.mic.on{background:var(--danger);color:#fff;animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.6}}
+.hint{color:var(--muted);font-size:14px;margin:2px 2px 10px}
+ul{list-style:none;margin:0;padding:0}
+li{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:6px 6px 6px 14px;margin:0 0 8px}
+li label{flex:1;display:flex;align-items:center;gap:14px;padding:8px 0;cursor:pointer;min-width:0}
+li input[type=checkbox]{appearance:none;width:26px;height:26px;padding:0;flex:none;border:2px solid var(--muted);border-radius:50%;background:transparent;display:grid;place-content:center}
+li input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent)}
+li input[type=checkbox]:checked::after{content:"✓";color:var(--accent-text);font-size:16px;font-weight:700;line-height:1}
+.name{overflow-wrap:anywhere}
+.qty{color:var(--muted);white-space:nowrap;margin-left:auto;padding-left:8px}
+li.done .name{text-decoration:line-through;color:var(--muted)}
+li.done{opacity:.7}
+.del{background:transparent;color:var(--muted);padding:10px 12px;font-size:20px;font-weight:400}
+.sec{display:flex;align-items:center;justify-content:space-between;margin:18px 2px 8px;color:var(--muted);font-size:14px;text-transform:uppercase;letter-spacing:.04em}
+.empty{text-align:center;color:var(--muted);padding:40px 0}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:15px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;text-align:center}
+#toast.show{opacity:1}
+#setup{max-width:420px;margin:12vh auto;padding:0 20px}
+#setup p{color:var(--muted)}
+#setup input{margin:12px 0}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<section id="setup" hidden>
+  <h1>Zakupki</h1>
+  <p>Wpisz wspólny kod dostępu (ten sam na obu telefonach).</p>
+  <input id="keyInput" type="password" autocomplete="off" placeholder="Kod dostępu">
+  <button id="keyBtn" style="width:100%">Zaczynamy</button>
+  <p id="keyErr" style="color:var(--danger)" hidden>Zły kod. Spróbuj jeszcze raz.</p>
+</section>
+
+<div id="app" hidden>
+<header><h1>Zakupki</h1><span id="dot" class="dot" title="Synchronizacja"></span></header>
+<main>
+  <form id="form" autocomplete="off">
+    <input id="name" placeholder="Co kupić?" enterkeyhint="done" required>
+    <input id="qty" inputmode="decimal" placeholder="Ilość">
+    <select id="unit" aria-label="Jednostka">
+      <option value="">—</option><option>szt</option><option>kg</option><option>g</option><option>dag</option>
+      <option>l</option><option>ml</option><option>opak.</option>
+    </select>
+    <div class="row2">
+      <button class="add" type="submit">Dodaj</button>
+      <button class="mic" type="button" id="mic" aria-label="Dodaj głosem">🎤</button>
+    </div>
+  </form>
+  <div class="hint" id="hint">Głosem np.: „2 kilo jabłek, mleko 1,5 litra i chleb”.</div>
+  <div id="list"></div>
+</main>
+</div>
+<div id="toast"></div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const LS = { get(k){ try { return localStorage.getItem(k); } catch { return null; } },
+               set(k,v){ try { localStorage.setItem(k,v); } catch {} } };
+
+  let key = LS.get('zakupki.key') || '';
+  let state = JSON.parse(LS.get('zakupki.state') || '{"rev":0,"items":[]}');
+  let queue = JSON.parse(LS.get('zakupki.queue') || '[]');
+  let busy = false;
+
+  // Link z kodem: .../#k=KOD — zapisuje kod i czyści adres (wygodne do wysłania partnerce).
+  const m = location.hash.match(/k=([^&]+)/);
+  if (m) { key = decodeURIComponent(m[1]); LS.set('zakupki.key', key); history.replaceState(null, '', location.pathname); }
+
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+  // ── Sieć ──────────────────────────────────────────────
+  async function call(body) {
+    const r = await fetch('api.php', {
+      method: body ? 'POST' : 'GET',
+      headers: { 'X-List-Key': key, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined, cache: 'no-store'
+    });
+    if (r.status === 401) throw Object.assign(new Error('401'), { auth: true });
+    if (!r.ok) throw new Error(r.status);
+    return r.json();
+  }
+
+  async function sync() {
+    if (busy || !key) return;
+    busy = true;
+    try {
+      let s;
+      if (queue.length) { s = await call({ ops: queue }); queue = []; LS.set('zakupki.queue', '[]'); }
+      else s = await call();
+      state = s; LS.set('zakupki.state', JSON.stringify(s));
+      $('dot').classList.remove('off');
+      showApp(); render();
+    } catch (e) {
+      if (e.auth) { LS.set('zakupki.key', ''); key = ''; showSetup(true); }
+      else $('dot').classList.add('off');
+    } finally { busy = false; }
+  }
+
+  function op(o) {            // optymistycznie lokalnie + kolejka do wysłania
+    if (o.op === 'add') state.items.push({ id: o.id, name: o.name, qty: o.qty, unit: o.unit, done: false });
+    if (o.op === 'toggle') state.items.forEach(i => { if (i.id === o.id) i.done = o.done; });
+    if (o.op === 'delete') state.items = state.items.filter(i => i.id !== o.id);
+    if (o.op === 'clear_done') state.items = state.items.filter(i => !i.done);
+    queue.push(o); LS.set('zakupki.queue', JSON.stringify(queue));
+    LS.set('zakupki.state', JSON.stringify(state));
+    render(); sync();
+  }
+
+  // ── Widok ─────────────────────────────────────────────
+  function showSetup(err) { $('app').hidden = true; $('setup').hidden = false; $('keyErr').hidden = !err; }
+  function showApp() { $('setup').hidden = true; $('app').hidden = false; }
+
+  function itemEl(i) {
+    const li = document.createElement('li'); if (i.done) li.className = 'done';
+    const lab = document.createElement('label');
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !!i.done;
+    cb.onchange = () => op({ op: 'toggle', id: i.id, done: cb.checked });
+    const nm = document.createElement('span'); nm.className = 'name'; nm.textContent = i.name;
+    lab.append(cb, nm);
+    if (i.qty || i.unit) { const q = document.createElement('span'); q.className = 'qty'; q.textContent = [i.qty, i.unit].filter(Boolean).join(' '); lab.append(q); }
+    const del = document.createElement('button'); del.className = 'del'; del.textContent = '✕'; del.setAttribute('aria-label', 'Usuń');
+    del.onclick = () => op({ op: 'delete', id: i.id });
+    li.append(lab, del); return li;
+  }
+
+  function render() {
+    const box = $('list'); box.replaceChildren();
+    const todo = state.items.filter(i => !i.done), done = state.items.filter(i => i.done);
+    if (!state.items.length) { const e = document.createElement('div'); e.className = 'empty'; e.textContent = 'Lista jest pusta. Dodaj pierwszą rzecz 🛒'; box.append(e); return; }
+    const ul = document.createElement('ul'); todo.forEach(i => ul.append(itemEl(i))); box.append(ul);
+    if (done.length) {
+      const s = document.createElement('div'); s.className = 'sec';
+      const t = document.createElement('span'); t.textContent = 'Kupione (' + done.length + ')';
+      const b = document.createElement('button'); b.className = 'ghost'; b.textContent = 'Usuń kupione';
+      b.onclick = () => { if (confirm('Usunąć wszystkie kupione?')) op({ op: 'clear_done' }); };
+      s.append(t, b); box.append(s);
+      const ul2 = document.createElement('ul'); done.forEach(i => ul2.append(itemEl(i))); box.append(ul2);
+    }
+  }
+
+  // ── Dodawanie ręczne ──────────────────────────────────
+  $('form').onsubmit = e => {
+    e.preventDefault();
+    const name = $('name').value.trim(); if (!name) return;
+    const qty = $('qty').value.trim().replace('.', ','), unit = $('unit').value;
+    // Pola ilości puste = tekst mógł pochodzić z dyktowania z klawiatury (iOS) — rozbij go tak samo jak mowę.
+    const items = qty || unit ? [{ name: name[0].toUpperCase() + name.slice(1), qty, unit }] : parseSpeech(name);
+    items.forEach(it => op({ op: 'add', id: uid(), ...it }));
+    $('name').value = ''; $('qty').value = ''; $('unit').value = ''; $('name').focus();
+  };
+
+  // ── Głos ──────────────────────────────────────────────
+  const NUM = { jeden:1,jedna:1,jedno:1,jedną:1,dwa:2,dwie:2,dwóch:2,trzy:3,trzech:3,cztery:4,czterech:4,pięć:5,sześć:6,siedem:7,osiem:8,dziewięć:9,dziesięć:10,jedenaście:11,dwanaście:12,pół:0.5,połowa:0.5,ćwierć:0.25 };
+  const UNIT = { kg:'kg',kilo:'kg',kilogram:'kg',kilogramy:'kg',kilogramów:'kg',kilograma:'kg',
+    g:'g',gram:'g',gramy:'g',gramów:'g',dag:'dag',deka:'dag',dekagram:'dag',dekagramy:'dag',dekagramów:'dag',
+    l:'l',litr:'l',litry:'l',litrów:'l',litra:'l',ml:'ml',mililitr:'ml',mililitry:'ml',mililitrów:'ml',
+    szt:'szt',sztuka:'szt',sztuki:'szt',sztuk:'szt',opakowanie:'opak.',opakowania:'opak.',opakowań:'opak.',opak:'opak.',paczka:'opak.',paczki:'opak.',paczek:'opak.' };
+
+  function parsePart(part) {
+    const tokens = part.replace(/(\d)([a-ząćęłńóśźż])/gi, '$1 $2').replace(/\s+/g, ' ').trim().split(' ');
+    let qty = '', unit = '';
+    const rest = [];
+    for (const raw of tokens) {
+      const w = raw.toLowerCase().replace(/[.!?]+$/, '');
+      if (!qty && /^\d+([.,]\d+)?$/.test(w)) { qty = w.replace('.', ','); continue; }
+      if (!qty && NUM[w] !== undefined) { qty = String(NUM[w]).replace('.', ','); continue; }
+      if (!unit && UNIT[w] && (qty || w.length > 1)) { unit = UNIT[w]; qty = qty || '1'; continue; }
+      rest.push(raw.replace(/[.!?]+$/, ''));
+    }
+    const name = rest.join(' ').replace(/^(po|z|ze|na)\s+/i, '').trim();
+    return name ? { name: name[0].toUpperCase() + name.slice(1), qty, unit } : null;
+  }
+  function parseSpeech(text) {
+    return text.split(/\s*,(?!\d)\s*|\s+i\s+|\s+oraz\s+/i).map(parsePart).filter(Boolean);
+  }
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { $('mic').hidden = true; $('hint').textContent = 'Dyktowanie: dotknij mikrofonu na klawiaturze telefonu, np. „2 kilo jabłek i chleb”.'; }
+  else {
+    let rec = null;
+    $('mic').onclick = () => {
+      if (rec) { rec.stop(); return; }
+      rec = new SR(); rec.lang = 'pl-PL'; rec.interimResults = false; rec.maxAlternatives = 1;
+      $('mic').classList.add('on');
+      rec.onresult = ev => {
+        const text = ev.results[0][0].transcript;
+        const items = parseSpeech(text);
+        if (!items.length) { toast('Nie usłyszałem nic do dodania'); return; }
+        items.forEach(it => op({ op: 'add', id: uid(), ...it }));
+        toast('Dodano: ' + items.map(i => i.name).join(', '));
+      };
+      rec.onerror = ev => { if (ev.error === 'not-allowed') toast('Zezwól na mikrofon w ustawieniach przeglądarki'); else if (ev.error !== 'aborted' && ev.error !== 'no-speech') toast('Błąd rozpoznawania mowy'); };
+      rec.onend = () => { rec = null; $('mic').classList.remove('on'); };
+      try { rec.start(); } catch { rec = null; $('mic').classList.remove('on'); }
+    };
+  }
+
+  // ── Start ─────────────────────────────────────────────
+  $('keyBtn').onclick = () => {
+    const v = $('keyInput').value.trim(); if (!v) return;
+    key = v; LS.set('zakupki.key', v); sync();
+  };
+  $('keyInput').onkeydown = e => { if (e.key === 'Enter') $('keyBtn').click(); };
+
+  if (key) { showApp(); render(); sync(); } else showSetup(false);
+  setInterval(() => { if (!document.hidden) sync(); }, 4000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) sync(); });
+  window.addEventListener('online', sync);
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>

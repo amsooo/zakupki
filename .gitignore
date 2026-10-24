@@ -1,0 +1,4 @@
+# Kod dostępu i dane listy — tylko na serwerze
+config.php
+data/list.json
+.DS_Store
