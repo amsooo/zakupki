@@ -1,6 +1,6 @@
 // Offline: powłoka aplikacji z cache, API zawsze z sieci.
-const CACHE = 'zakupki-v1';
-const SHELL = ['./', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const CACHE = 'zakupki-v2';
+const SHELL = ['./', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));
   self.skipWaiting();
