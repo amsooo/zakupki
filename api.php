@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             case 'add':
                 $name = $clean($op['name'] ?? '', 120);
                 if ($id === '' || $name === '') break;
-                foreach ($state['items'] as $it) if ($it['id'] === $id) continue 2;
+                foreach ($state['items'] as $it) if ($it['id'] === $id) break 2;
                 $state['items'][] = [
                     'id' => $id, 'name' => $name,
                     'qty' => $clean($op['qty'] ?? '', 12),
